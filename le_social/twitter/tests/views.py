@@ -6,8 +6,8 @@ from django.http import HttpResponse
 
 from .. import views
 
-kwargs = {'consumer_key': 'key',
-          'consumer_secret': 'secret'}
+kwargs = {'client_key': 'key',
+          'client_secret': 'secret'}
 
 authorize = views.Authorize.as_view(**kwargs)
 

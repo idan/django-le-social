@@ -18,7 +18,7 @@ setup(
     long_description=open('README.rst').read(),
     install_requires=[
         'Django',
-        'twitter>=1.6.1',
+        'requests>=0.11.3',
         'python-openid>=2.2.5',
         'itsdangerous>=0.11',
     ],
