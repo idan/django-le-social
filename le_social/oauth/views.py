@@ -90,7 +90,12 @@ class OAuth1Mixin(object):
 class OAuth1Authenticate(generic.View, OAuth1Mixin):
     """A base class for the authenthicate view.
 
-    Get a request token and redirect to the service's.
+    Get a request token and redirect to the service's authentication endpoint.
+
+    Subclasses must define:
+
+        - get_request_token_endpoint
+        - get_authenticate_endpoint
     """
     def get(self, request, force_login=False, *args, **kwargs):
         oauth = self.get_auth()
@@ -148,12 +153,13 @@ class OAuth1Callback(generic.View, OAuth1Mixin):
     """
     A base class for the return callback. Subclasses must define:
 
-        - error(error_msg, exception=None): what to do when
-          something goes wrong? Must return an HttpResponse
+    Subclasses must define:
 
-        - success(auth): what to do on successful auth? Do
-          some stuff with the twitter.OAuth object and return
-          an HttpResponse
+        - get_access_token_endpoint
+        - success(token, secret): logic for handling a successful authentication.
+          Must return an HttpResponse.
+        - error(error_msg, exception=None): logic for handling a failed
+          authentication. Must return an HttpResponse.
     """
     def get(self, request, *args, **kwargs):
         if request.method != 'GET':
