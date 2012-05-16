@@ -6,8 +6,7 @@ import urllib
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.shortcuts import redirect
-from django.http import (HttpResponseNotAllowed, HttpResponseBadRequest,
-                         HttpResponseServerError)
+from django.http import HttpResponseNotAllowed, HttpResponseServerError
 
 from ..utils import generic
 
@@ -96,16 +95,15 @@ class OAuth1Authenticate(generic.View, OAuth1Mixin):
     def get(self, request, force_login=False, *args, **kwargs):
         oauth = self.get_auth()
         try:
-            r = requests.post(self.get_request_token_endpoint, auth=oauth)
+            r = requests.post(self.get_request_token_endpoint(), auth=oauth)
         except requests.exceptions.RequestsException:
             # TODO: more meaningful handling of errors here.
             return self.error('An error occured while getting request tokens from the service.')
 
         if r.status_code != 200:
             # TODO: what should we do here?
-            # can't proceed if we don't get tokens from the service.=
+            # can't proceed if we don't get request tokens from the service.
             return HttpResponseServerError()
-            return self.error('Request tokens were not successfully acquired.')
 
         params = dict(urlparse.parse_qsl(r.content, strict_parsing=True))
         callback_confirmed = params.get('oauth_callback_confirmed', None)
@@ -166,7 +164,7 @@ class OAuth1Callback(generic.View, OAuth1Mixin):
         oauth_verifier = request.GET.get('oauth_verifier', None)
 
         if not oauth_verifier or oauth_token:
-            return self.error('Callback OAuth parameters must include a token and verifier.')
+            return self.error('Callback OAuth parameters did not include a token and verifier.')
 
         request_token, request_token_secret = request.session.pop('request_tokens')
         request.session.modified = True
@@ -174,40 +172,43 @@ class OAuth1Callback(generic.View, OAuth1Mixin):
         if oauth_token != request_token:
             return self.error('Request token and returned OAuth token do not match.')
 
-
-        
-        verifier = request.GET.get('oauth_verifier', None)
-        if verifier is None:
-            return self.error('No verifier code')
-
-        if not 'request_token' in request.session:
-            return self.error('No request token found in the session')
-
-        request_token = request.session.pop('request_token')
-        request.session.modified = True
-
-        oauth = OAuth(request_token[0], request_token[1],
-                      self.get_client_key(),
-                      self.get_client_secret())
-        api = Twitter(auth=oauth, secure=True, format='', api_version=None)
+        self.verifier = oauth_verifier
+        oauth = self.get_auth()
         try:
-            (oauth.token, oauth.token_secret) = parse_oauth_tokens(
-                api.oauth.access_token(oauth_verifier=verifier))
-        except TwitterError:
-            return self.error('Failed to get an access token')
+            r = requests.post(self.get_access_token_endpoint(), auth=oauth)
+        except requests.exceptions.RequestsException as e:
+            # TODO: more meaningful handling of errors here.
+            return self.error('An error occured while exchanging request token '
+                              'for access token.', e)
 
-        return self.success(oauth)
+        if r.status_code != 200:
+            # TODO: what should we do here?
+            # can't proceed if we don't get access tokens from the service.
+            return self.error('Access tokens were not successfully acquired.')
 
-    def success(self, auth):
+        params = dict(urlparse.parse_qsl(r.content, strict_parsing=True))
+        resource_owner_key = params.get('oauth_token', None)
+        resource_owner_secret = params.get('oauth_token_secret', None)
+        if not resource_owner_key or resource_owner_secret:
+            return self.error('Access token exchange did not return a token and secret.')
+
+        return self.success(resource_owner_key, resource_owner_secret)
+
+    def get_access_token_endpoint(self):
+        """Get the API endpoint for acquiring a request token."""
+        raise NotImplementedError("You must provide an implementation of "
+                                  "get_access_token_endopoint")
+
+    def success(self, key, secret):
         """
         Twitter authentication successful, do some stuff with his key.
         """
-        raise NotImplementedError("You need to provide an implementation of "
+        raise NotImplementedError("You must provide an implementation of "
                                   "success(auth)")
 
     def error(self, message, exception=None):
         """
         Meh. Something broke.
         """
-        raise NotImplementedError("You need to provide an implementation of "
+        raise NotImplementedError("You must provide an implementation of "
                                   "error(message, exception=None)")
